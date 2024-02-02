@@ -1,11 +1,11 @@
 //+------------------------------------------------------------------+
-//|                                                    MATwister.mq5 |
-//|                             Copyright 2024, Tradity Capital Ltd. |
-//|                                   https://www.traditycapital.com |
+//|                                                   FX_SG_Bell.mq5 |
+//|                                 Copyright 2023, Stephen Gachanja |
+//|                                    https://www.traditycapital.com|
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2024, Tradity Capital Ltd."
+#property copyright "Copyright 2023, Tradity Capital Ltd."
 #property link      "https://www.traditycapital.com"
-#property version   "1.00"
+#property version   "4.00"
 
 #include<Trade\Trade.mqh>
 CTrade trade;
@@ -46,7 +46,8 @@ input double my_daily_target = 0.5;//MY DAILY TARGET (%)
 input double total_drawdown = 6;//MAX TOTAL DRAWDOWN(%)
 input double daily_allowable_drawdown = 1;//DAILY ALLOWABLE DRAWDOWN(%)
 input double daily_drawdown = 3;//MAX DAILY DRAWDOWN(%)
-input int tradeprofit = 3;//TARGET PROFIT($)
+input int trading_commission = 13;//ACCOUNT COMMISSION PER LOT($)
+input double commission_exit_multiplier = 1.01;//COMMISSION FILTER(MULTIPLIER)
 
 input string closetrades = "== CLOSE TRADES/DD MANAGER ==";
 input bool Close_Trades_Based_on_Profit = true;//ACTIVATE CLOSURE OF TRADES BASED ON PROFIT
@@ -75,7 +76,7 @@ double Total_balance;
 double startingBalanceToday;
 double previousDayBalance;
 double daily_allowable_DD;
-bool tradesPlacedForCurrentSignal = false; // Flag to check if trades have been placed for the current signal
+//bool tradesPlacedForCurrentSignal = false; // Flag to check if trades have been placed for the current signal
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
@@ -112,6 +113,7 @@ void OnTick()
    double today_profit;
    double daily_target;
    datetime Local_time = TimeCurrent();
+   static datetime lastExecutionTime = 0;
    MqlDateTime localT;
    TimeToStruct(Local_time,localT);
    int current_min = localT.min;
@@ -199,25 +201,28 @@ void OnTick()
 
    if(localT.day_of_week<= last_day_of_trading)
       //Output
-      Comment("BUY: ",(((myMovingAverageArrayslow[1] < myMovingAverageArraylarge[1]) && (myMovingAverageArrayslow[0] > myMovingAverageArraylarge[0])) && (myMovingAverageArrayfast[1] > myMovingAverageArrayslow[1])),
-       "%","\nSELL: $", (((myMovingAverageArrayslow[1] < myMovingAverageArraylarge[1]) && (myMovingAverageArrayslow[0] < myMovingAverageArraylarge[0])) && (myMovingAverageArrayfast[1] < myMovingAverageArrayslow[1])), " Vs Today's Max. Allowable DD: $",daily_allowable_DD,"\nTotal Max DD: $",Total_max_DD,"\nTotal Current DD: ",curr_DD, "% Vs Target: ",my_target,"%","\nToday's PnL $: ",today_profit," Vs Today's Target: $",daily_target);
+      Comment("Target: ",my_target, "%",
+              "\nDaily Max. DD: $", Daily_max_DD, " Vs Today's Max. Allowable DD: $",daily_allowable_DD,
+              "\nTotal Max DD: $",Total_max_DD,
+              "\nTotal Current DD: ",curr_DD, "% Vs Target: ",my_target,"%",
+              "\nToday's PnL $: ",today_profit," Vs Today's Target: $",daily_target);
      {
 
       // Reset the flag if a new signal is detected
-      if((((myMovingAverageArrayslow[1] < myMovingAverageArraylarge[1]) && (myMovingAverageArrayslow[0] > myMovingAverageArraylarge[0])) && (myMovingAverageArrayfast[0] < myMovingAverageArrayslow[0])) ||
-         (((myMovingAverageArrayslow[1] < myMovingAverageArraylarge[1]) && (myMovingAverageArrayslow[0] < myMovingAverageArraylarge[0])) && (myMovingAverageArrayfast[0] > myMovingAverageArrayslow[0])))
+      /*if((MA1 > MA2 > MA3) ||
+         (MA1 < MA2 < MA3))
         {
          tradesPlacedForCurrentSignal = false;
-        }
-
-      if(!tradesPlacedForCurrentSignal && today_profit <= daily_target && today_profit >= daily_allowable_DD && localT.hour>Launch_Time && localT.hour<end_of_trading)
+        }*/
+      lastExecutionTime = Local_time;
+      if(/*!tradesPlacedForCurrentSignal && */today_profit <= daily_target && today_profit >= daily_allowable_DD && localT.hour>Launch_Time && localT.hour<end_of_trading)
         {
-         if(localT.min == 0 || localT.min == 15 || localT.min == 30 || localT.min == 45)
+         if(localT.min == 0 || localT.min == 5 || localT.min == 10 || localT.min == 15 || localT.min == 20 || localT.min == 25 || localT.min == 30 || localT.min == 35 || localT.min == 40 || localT.min == 45|| localT.min == 50 || localT.min == 55 )
            {
 
             if(OrderExists() == false && difference <= max_diff)
               {
-               if(((myMovingAverageArrayslow[1] < myMovingAverageArraylarge[1]) && (myMovingAverageArrayslow[0] > myMovingAverageArraylarge[0])) && (myMovingAverageArrayfast[1] > myMovingAverageArrayslow[1]))
+               if(MA1 > MA2 > MA3)
                  {
 
                   for(i = 0; i<number_of_trades_per_signal; i++)
@@ -225,17 +230,17 @@ void OnTick()
 
                      ticketnumber = trade.Buy(lotsize_atr_result, NULL, Ask,0,0,"FX_SG_BELL-> BUY");
                     }
-                  tradesPlacedForCurrentSignal = true; //flag set to true after placing trades
+                  //tradesPlacedForCurrentSignal = true; //flag set to true after placing trades
                  }
 
-               if(((myMovingAverageArrayslow[1] > myMovingAverageArraylarge[1]) && (myMovingAverageArrayslow[0] < myMovingAverageArraylarge[0])) && (myMovingAverageArrayfast[1] < myMovingAverageArrayslow[1]))
+               if(MA1 < MA2 < MA3)
                  {
 
                   for(i = 0; i<number_of_trades_per_signal; i++)
                     {
                      ticketnumber = trade.Sell(lotsize_atr_result, NULL, Bid,0,0,"FX_SG_BELL-> SELL");
                     }
-                  tradesPlacedForCurrentSignal = true; //flag set to true after placing trades
+                  //tradesPlacedForCurrentSignal = true; //flag set to true after placing trades
                  }
 
               }
@@ -247,7 +252,7 @@ void OnTick()
       CloseTradesOnProfit();
      }
 
-   
+
   }
 //+------------------------------------------------------------------+
 // Define the function to check if there is an existing order
@@ -309,7 +314,7 @@ void Close_trades()
 //+------------------------------------------------------------------+
 void CloseTradesOnProfit()
   {
-   double trade_profit = tradeprofit; // USD per lot
+   double commissionPerLot = trading_commission; // USD per lot
 
    for(int i = PositionsTotal() - 1; i >= 0; i--)
      {
@@ -318,10 +323,11 @@ void CloseTradesOnProfit()
         {
          if(PositionGetString(POSITION_SYMBOL) == _Symbol)
            {
-            
+            double positionSize = PositionGetDouble(POSITION_VOLUME);
+            double commission = positionSize * commissionPerLot * commission_exit_multiplier;
             double profit = PositionGetDouble(POSITION_PROFIT);
 
-            if(profit > trade_profit)
+            if(profit > commission)
               {
                bool success = trade.PositionClose(ticket, "Profit exceeds commission");
                if(success)
