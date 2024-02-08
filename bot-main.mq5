@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2023, Tradity Capital Ltd."
 #property link      "https://www.traditycapital.com"
-#property version   "4.00"
+#property version   "1.00"
 
 #include<Trade\Trade.mqh>
 CTrade trade;
@@ -14,17 +14,15 @@ input string balances_parameters = "== STARTING BALANCES ==";
 input double balance = 6000;//INITIAL STARTING BALANCE
 
 input string ma_parameters = "== ENTRY PARAMETERS ==";
-input int ATR_Period_slow_MA= 21;//PERIOD USED FOR SLOW MA CALCULATION
-input int ATR_Period_large_MA= 50;
+input int Period_fast_MA= 13;//PERIOD USED FOR FAST MA CALCULATION
+input int Period_slow_MA= 21;//PERIOD USED FOR SLOW MA CALCULATION
+input int Period_large_MA= 50;//PERIOD USED FOR LARGE MA CALCULATION
 input ENUM_MA_METHOD MA_Method_for_slow_MA = MODE_SMA;//METHOD USED FOR SLOW MA CALCULATION
-input int ATR_Period_fast_MA= 13;//PERIOD USED FOR FAST MA CALCULATION
+
 input ENUM_MA_METHOD MA_Method_for_fast_MA = MODE_SMA;//METHOD USED FOR FAST MA CALCULATION
 input ENUM_APPLIED_PRICE PRICE_USED_WITH_MA = PRICE_OPEN;//PRICE USED FOR FAST MA CALCULATION
 input int number_of_trades_per_signal = 1;//NUMBER OF TRADES PER SIGNAL
-input double max_diff = 400;//MAX POINTS TO ALLOW TRADING
-input int volume_limit = 3000;//VOLUME LIMIT
-input int min_distance_from_MA = 0;//MIN DISTANCE FROM MA FOR ENTRIES
-input int max_distance_from_MA = 3000;//MAX DISTANCE FROM MA FOR ENTRIES
+input int min_distance_from_MA = 40;//MIN DISTANCE FROM MA FOR ENTRIES
 
 input string timefunction_parameters = "== TIME FUNCTION PARAMETERS ==";
 input int number_of_minutes = 0;//NUMBER OF MINUTES FOR EXECUTION PER SIGNAL
@@ -46,8 +44,7 @@ input double my_daily_target = 0.5;//MY DAILY TARGET (%)
 input double total_drawdown = 6;//MAX TOTAL DRAWDOWN(%)
 input double daily_allowable_drawdown = 1;//DAILY ALLOWABLE DRAWDOWN(%)
 input double daily_drawdown = 3;//MAX DAILY DRAWDOWN(%)
-input int trading_commission = 13;//ACCOUNT COMMISSION PER LOT($)
-input double commission_exit_multiplier = 1.01;//COMMISSION FILTER(MULTIPLIER)
+input int tradeprofit = 3;//TARGET PROFIT($)
 
 input string closetrades = "== CLOSE TRADES/DD MANAGER ==";
 input bool Close_Trades_Based_on_Profit = true;//ACTIVATE CLOSURE OF TRADES BASED ON PROFIT
@@ -76,7 +73,7 @@ double Total_balance;
 double startingBalanceToday;
 double previousDayBalance;
 double daily_allowable_DD;
-//bool tradesPlacedForCurrentSignal = false; // Flag to check if trades have been placed for the current signal
+bool tradesPlacedForCurrentSignal = false; // Flag to check if trades have been placed for the current signal
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
@@ -113,7 +110,6 @@ void OnTick()
    double today_profit;
    double daily_target;
    datetime Local_time = TimeCurrent();
-   static datetime lastExecutionTime = 0;
    MqlDateTime localT;
    TimeToStruct(Local_time,localT);
    int current_min = localT.min;
@@ -157,9 +153,9 @@ void OnTick()
    double myMovingAverageArrayslow[], myMovingAverageArrayfast[],myMovingAverageArraylarge[];
 
 /////Collect MA values for crosses
-   double MA1 = iMA(_Symbol,_Period,ATR_Period_slow_MA,0,MA_Method_for_slow_MA,PRICE_OPEN);
-   double MA2 = iMA(_Symbol,_Period,ATR_Period_fast_MA,0,MA_Method_for_fast_MA,PRICE_OPEN);
-   double MA3 = iMA(_Symbol,_Period,ATR_Period_large_MA,0,MA_Method_for_fast_MA,PRICE_OPEN);
+   double MA1 = iMA(_Symbol,_Period,Period_slow_MA,0,MA_Method_for_slow_MA,PRICE_USED_WITH_MA);
+   double MA2 = iMA(_Symbol,_Period,Period_fast_MA,0,MA_Method_for_fast_MA,PRICE_USED_WITH_MA);
+   double MA3 = iMA(_Symbol,_Period,Period_large_MA,0,MA_Method_for_fast_MA,PRICE_USED_WITH_MA);
 
 /////Sort the MA price array of slow MA from the current candle downwards
    ArraySetAsSeries(myMovingAverageArrayslow,true);
@@ -177,8 +173,8 @@ void OnTick()
    double diffMAopen[],diffMAclose[];
 
 /////Collect the MA values
-   double MAopen = iMA(_Symbol,_Period,1,0,MODE_SMA,PRICE_OPEN);
-   double MAclose = iMA(_Symbol,_Period,1,0,MODE_SMA,PRICE_CLOSE);
+   double MAopen = iMA(_Symbol,_Period,Period_fast_MA,0,MODE_SMA,PRICE_USED_WITH_MA);
+   double MAclose = iMA(_Symbol,_Period,1,0,MODE_SMA,PRICE_USED_WITH_MA);
 
 ////Sort the MA price array of diffOpen MA from the current candle downwards
    ArraySetAsSeries(diffMAopen,true);
@@ -196,7 +192,6 @@ void OnTick()
    double MAdiff = diffMAopen[1]-diffMAclose[1];
    double difference = NormalizeDouble((MathAbs(MAdiff)/_Point),1);
    bool isabovemin_diff = difference > min_distance_from_MA;
-   bool isbelowmax_diff = difference < max_distance_from_MA;
 
 
    if(localT.day_of_week<= last_day_of_trading)
@@ -206,41 +201,42 @@ void OnTick()
               "\nTotal Max DD: $",Total_max_DD,
               "\nTotal Current DD: ",curr_DD, "% Vs Target: ",my_target,"%",
               "\nToday's PnL $: ",today_profit," Vs Today's Target: $",daily_target);
-     {
+      
+      {
 
-      // Reset the flag if a new signal is detected
-      /*if((MA1 > MA2 > MA3) ||
-         (MA1 < MA2 < MA3))
+
+      if(today_profit <= daily_target && today_profit >= daily_allowable_DD && localT.hour>Launch_Time && localT.hour<end_of_trading)
         {
-         tradesPlacedForCurrentSignal = false;
-        }*/
-      lastExecutionTime = Local_time;
-      if(/*!tradesPlacedForCurrentSignal && */today_profit <= daily_target && today_profit >= daily_allowable_DD && localT.hour>Launch_Time && localT.hour<end_of_trading)
-        {
-         if(localT.min == 0 || localT.min == 5 || localT.min == 10 || localT.min == 15 || localT.min == 20 || localT.min == 25 || localT.min == 30 || localT.min == 35 || localT.min == 40 || localT.min == 45|| localT.min == 50 || localT.min == 55 )
+         if(localT.min > 0)
            {
 
-            if(OrderExists() == false && difference <= max_diff)
+            if(OrderExists() == false && isabovemin_diff)
               {
-               if(MA1 > MA2 > MA3)
+               if(((myMovingAverageArrayfast[0] > myMovingAverageArrayslow[0]) && (myMovingAverageArrayslow[0] > myMovingAverageArraylarge[0])) &&
+                  !((myMovingAverageArrayfast[1] < myMovingAverageArrayslow[1] &&
+                     myMovingAverageArrayfast[0] > myMovingAverageArrayslow[0])||
+                    (myMovingAverageArrayfast[1] > myMovingAverageArrayslow[1] &&
+                     myMovingAverageArrayfast[0] < myMovingAverageArrayslow[0])))
                  {
 
                   for(i = 0; i<number_of_trades_per_signal; i++)
                     {
 
-                     ticketnumber = trade.Buy(lotsize_atr_result, NULL, Ask,0,0,"FX_SG_BELL-> BUY");
+                     ticketnumber = trade.Buy(lotsize_atr_result, NULL, Ask,0,0,"FX_SG_MATWISTER-> BUY");
                     }
-                  //tradesPlacedForCurrentSignal = true; //flag set to true after placing trades
                  }
 
-               if(MA1 < MA2 < MA3)
+               if(((myMovingAverageArrayfast[0] < myMovingAverageArrayslow[0]) && (myMovingAverageArrayslow[0] < myMovingAverageArraylarge[0])) &&
+                  !((myMovingAverageArrayfast[1] < myMovingAverageArrayslow[1] &&
+                     myMovingAverageArrayfast[0] > myMovingAverageArrayslow[0])||
+                    (myMovingAverageArrayfast[1] > myMovingAverageArrayslow[1] &&
+                     myMovingAverageArrayfast[0] < myMovingAverageArrayslow[0])))
                  {
 
                   for(i = 0; i<number_of_trades_per_signal; i++)
                     {
-                     ticketnumber = trade.Sell(lotsize_atr_result, NULL, Bid,0,0,"FX_SG_BELL-> SELL");
+                     ticketnumber = trade.Sell(lotsize_atr_result, NULL, Bid,0,0,"FX_SG_MATWISTER-> SELL");
                     }
-                  //tradesPlacedForCurrentSignal = true; //flag set to true after placing trades
                  }
 
               }
@@ -250,6 +246,11 @@ void OnTick()
    if(Close_Trades_Based_on_Profit)
      {
       CloseTradesOnProfit();
+     }
+   if((myMovingAverageArrayfast[1] < myMovingAverageArraylarge[1] && myMovingAverageArrayfast[0] > myMovingAverageArraylarge[0]) ||
+      (myMovingAverageArrayfast[1] > myMovingAverageArraylarge[1] && myMovingAverageArrayfast[0] < myMovingAverageArraylarge[0]))
+     {
+      Close_trades();
      }
 
 
@@ -314,7 +315,7 @@ void Close_trades()
 //+------------------------------------------------------------------+
 void CloseTradesOnProfit()
   {
-   double commissionPerLot = trading_commission; // USD per lot
+   double trade_profit = tradeprofit; // USD per lot
 
    for(int i = PositionsTotal() - 1; i >= 0; i--)
      {
@@ -324,7 +325,7 @@ void CloseTradesOnProfit()
          if(PositionGetString(POSITION_SYMBOL) == _Symbol)
            {
             double positionSize = PositionGetDouble(POSITION_VOLUME);
-            double commission = positionSize * commissionPerLot * commission_exit_multiplier;
+            double commission = positionSize * trade_profit;
             double profit = PositionGetDouble(POSITION_PROFIT);
 
             if(profit > commission)
