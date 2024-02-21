@@ -48,6 +48,7 @@ input int tradeprofit = 3;//TARGET PROFIT($)
 
 input string closetrades = "== CLOSE TRADES/DD MANAGER ==";
 input bool Close_Trades_Based_on_Profit = true;//ACTIVATE CLOSURE OF TRADES BASED ON PROFIT
+input bool Close_Trades_Based_on_MA_Crosses = true;//ACTIVATE CLOSURE OF TRADES BASED ON MA CROSSES
 input bool Close_the_Trades_Based_on_Time = true;//ACTIVATE CLOSURE OF TRADES BASED ON TIME
 input int time_to_close = 20;//TIME TO CLOSE TRADES
 
@@ -201,13 +202,13 @@ void OnTick()
               "\nTotal Max DD: $",Total_max_DD,
               "\nTotal Current DD: ",curr_DD, "% Vs Target: ",my_target,"%",
               "\nToday's PnL $: ",today_profit," Vs Today's Target: $",daily_target);
-      
-      {
+
+     {
 
 
       if(today_profit <= daily_target && today_profit >= daily_allowable_DD && localT.hour>Launch_Time && localT.hour<end_of_trading)
         {
-         if(localT.min > 0)
+         if(localT.sec > 0 /*localT.min == 0 || localT.min == 5 || localT.min == 10 || localT.min == 15 || localT.min == 20 || localT.min == 25 || localT.min == 30 || localT.min == 35 || localT.min == 40 || localT.min == 45|| localT.min == 50 || localT.min == 55*/)
            {
 
             if(OrderExists() == false && isabovemin_diff)
@@ -247,8 +248,9 @@ void OnTick()
      {
       CloseTradesOnProfit();
      }
-   if((myMovingAverageArrayfast[1] < myMovingAverageArraylarge[1] && myMovingAverageArrayfast[0] > myMovingAverageArraylarge[0]) ||
-      (myMovingAverageArrayfast[1] > myMovingAverageArraylarge[1] && myMovingAverageArrayfast[0] < myMovingAverageArraylarge[0]))
+   if(Close_Trades_Based_on_MA_Crosses &&
+      ((myMovingAverageArrayfast[1] < myMovingAverageArrayslow[1] && myMovingAverageArrayfast[0] > myMovingAverageArrayslow[0]) ||
+       (myMovingAverageArrayfast[1] > myMovingAverageArrayslow[1] && myMovingAverageArrayfast[0] < myMovingAverageArrayslow[0])))
      {
       Close_trades();
      }
